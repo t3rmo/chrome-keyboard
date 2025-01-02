@@ -15,9 +15,9 @@ let keyboardElement: HTMLDivElement;
 let togglerButton: HTMLDivElement;
 let inputElement: HTMLInputElement;
 let keyboardHideTask: unknown = null;
-var languageLayout = englishLayout;
-var shiftPressed = false;
-var isMouseDown = false;
+let languageLayout = englishLayout;
+let shiftPressed = false;
+let isMouseDown = false;
 
 function setup(): void {
     chrome.storage.sync.get(
@@ -138,8 +138,8 @@ function onKeyPress(button: string): void {
     if (!inputElement || !button) {
         return;
     }
-    var pos = inputElement.selectionStart;
-    var posEnd = inputElement.selectionEnd;
+    let pos = inputElement.selectionStart;
+    let posEnd = inputElement.selectionEnd;
     if (
         inputElement.type.toLowerCase() === "number" &&
         button !== "{tab}" &&
