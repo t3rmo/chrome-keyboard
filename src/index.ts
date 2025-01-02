@@ -19,92 +19,159 @@ let languageLayout = englishLayout;
 let shiftPressed = false;
 let isMouseDown = false;
 
-function setup(): void {
-    chrome.storage.sync.get(
-        {
-            language: "english",
-        },
-        function (items) {
-            switch (items.language) {
-                case "german":
-                    languageLayout = germanLayout;
-                    break;
-                default:
-                    languageLayout = englishLayout;
-            }
-            const keyRowsDefault = languageLayout.layout.default;
-            keyRowsDefault[keyRowsDefault.length - 1] += " {downkeyboard}";
-            const keyRowsShift = languageLayout.layout.shift;
-            keyRowsShift[keyRowsShift.length - 1] += " {downkeyboard}";
-            if (!!keyboard) {
-                toggleShiftLayout();
-                toggleShiftLayout();
-            }
+function hideKeyboard(): void {
+    keyboardHideTask = setTimeout(() => {
+        const dialogs = document.querySelectorAll(".fixed-full");
+        keyboardElement.style.display = "none";
+        document.body.removeAttribute("style");
+        keyboardHideTask = null;
+        for (const fixed of dialogs) {
+            (fixed as HTMLElement).removeAttribute("style");
         }
+    });
+}
+
+function performNativeKeyPress(element: HTMLInputElement, keyCode: number): void {
+    element.dispatchEvent(
+        new KeyboardEvent("keydown", { keyCode: keyCode, which: keyCode })
     );
+    element.dispatchEvent(
+        new KeyboardEvent("keypress", { keyCode: keyCode, which: keyCode })
+    );
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
-    let styleElement = document.createElement("link");
-    styleElement.rel = "stylesheet";
-    styleElement.href = chrome.runtime.getURL("index.css");
-    document.head.appendChild(styleElement);
+function onKeyPressNumeric(button: string): void {
+    if (
+        ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, "{bksp}"].some(
+            (x) => String(x) === button
+        )
+    ) {
+        return;
+    }
+    if (button === "{bksp}") {
+        const strValue = String(inputElement.value);
+        if (strValue.length > 0) {
+            inputElement.value = strValue.substring(0, strValue.length - 1);
+        }
+    } else {
+        inputElement.value = String(inputElement.value) + button;
+    }
+    performNativeKeyPress(inputElement, String(button).charCodeAt(0));
+}
 
-    keyboardElement = document.createElement("div");
-    keyboardElement.id = "virtual-keyboard";
-    keyboardElement.onmousedown = (e) => e.preventDefault();
-    keyboardElement.ontouchstart = (e) => e.preventDefault();
-    document.body.append(keyboardElement);
-    let keyboardWrapper = document.createElement("div");
-    keyboardWrapper.className = "keyboard-wrapper simple-keyboard";
-    keyboardElement.append(keyboardWrapper);
 
-    togglerButton = document.createElement("div");
-    togglerButton.id = "keyboard-toggler";
-    togglerButton.className = "hidden";
-    togglerButton.onmousedown = (e) => e.preventDefault();
-    togglerButton.ontouchstart = (e) => e.preventDefault();
-    togglerButton.onclick = (e) => toggleKeyboard();
-    document.body.append(togglerButton);
-    document.body.addEventListener("mousedown", (e) => (isMouseDown = true));
-    document.body.addEventListener("mouseup", (e) => onMouseUp());
+function showKeyboard(): void {
+    const dialogs = document.querySelectorAll(".fixed-full");
+    if (keyboardHideTask != null) {
+        clearTimeout(keyboardHideTask as number);
+        keyboardHideTask = null;
+    }
+    keyboardElement.removeAttribute("style");
+    document.body.removeAttribute("style");
+    for (const fixed of dialogs) {
+        (fixed as HTMLElement).removeAttribute("style");
+    }
+}
 
-    [
-        "input",
-        "pointerdown",
-        "mousedown",
-        "pointerup",
-        "mouseup",
-        "selectstart",
-        "click",
-    ].forEach((key) => {
-        window.addEventListener(
-            key,
-            (event) => {
-                if (isChildElement(event.target, keyboardElement)) {
-                    event.preventDefault();
-                }
-            },
-            true
-        );
-    });
+function toggleKeyboard(): void {
+    if (keyboardElement.style.display === "none") {
+        showKeyboard();
+    } else {
+        hideKeyboard();
+    }
+}
 
-    keyboard = new Keyboard({
-        onKeyPress: (button) => onKeyPress(button),
-        onKeyReleased: (button) => onKeyRelease(button),
-        ...languageLayout,
-        display: {
-            "{tab}": "↹",
-            "{bksp}": "⌫",
-            "{downkeyboard}": "\u25BC",
-            "{space}": " ",
-            "{lock}": "⇪",
-            "{shift}": "⇧",
-            "{enter}": "↵",
-        },
-    });
-    setInterval(() => {
-        checkKeyboard();
-    }, 200);
+function showKeyboardToggler(): void {
+    togglerButton.classList.remove("hidden");
+}
+
+function hideKeyboardToggler(): void {
+    togglerButton.classList.add("hidden");
+}
+
+function onFocus(target: HTMLInputElement): void {
+    inputElement = target;
+    if (target.type.toLowerCase() === "number") {
+        keyboard.setOptions({
+            layout: numericLayout,
+            layoutName: "default",
+        });
+    } else {
+        keyboard.setOptions({
+            ...languageLayout,
+            layoutName: "default",
+        });
+    }
+
+    if (inputElement.matches(".no-keyboard")) {
+        showKeyboardToggler();
+        return;
+    }
+
+    hideKeyboardToggler();
+    showKeyboard();
+    const offset = 50;
+    const bodyRect = document.body.getBoundingClientRect().top;
+    const elementRect = inputElement.getBoundingClientRect().top;
+    const elementPosition = elementRect - bodyRect;
+    const offsetPosition = elementPosition - offset;
+    window.scrollTo({ top: offsetPosition, behavior: "smooth" });
+}
+
+
+
+function onFocusOut(): void {
+    if (inputElement) {
+        inputElement.blur();
+        inputElement = null as unknown as HTMLInputElement;
+    }
     hideKeyboard();
+    hideKeyboardToggler();
+}
+
+
+function checkKeyboard(): void {
+    if (isMouseDown) {
+        return;
+    }
+    if (document.activeElement && document.activeElement.matches(querySelector)) {
+        if (inputElement === document.activeElement) {
+            return;
+        }
+        onFocus(document.activeElement as HTMLInputElement);
+    } else {
+        if (inputElement === null) {
+            return;
+        }
+        onFocusOut();
+    }
+}
+
+function toggleShiftLayout(): void {
+    const currentLayout = keyboard.options.layoutName;
+    const shiftToggle = currentLayout === "default" ? "shift" : "default";
+
+    keyboard.setOptions({
+        layoutName: shiftToggle,
+    });
+}
+
+function handleShiftPress(): void {
+    shiftPressed = !shiftPressed;
+    toggleShiftLayout();
+}
+
+function handleCapsLockPressed(): void {
+    toggleShiftLayout();
+}
+
+function disableShiftPress(): void {
+    if (!shiftPressed) {
+        return;
+    }
+    shiftPressed = false;
+    toggleShiftLayout();
 }
 
 function isChildElement(child: EventTarget | null, target: HTMLElement): boolean {
@@ -197,17 +264,19 @@ function onKeyPress(button: string): void {
             inputElement.selectionEnd = pos;
             performNativeKeyPress(inputElement, 8);
             break;
-        case "{tab}":
-            let inputList = Array.from(document.querySelectorAll(querySelector));
-            let index = inputList.indexOf(inputElement);
+        case "{tab}": {
+            const inputList = Array.from(document.querySelectorAll(querySelector));
+            const index = inputList.indexOf(inputElement);
             (inputList[(index + 1) % inputList.length] as HTMLInputElement).focus();
             break;
+        }
         case "{downkeyboard}":
             break;
         case "{space}":
             button = " ";
+            break;
         default:
-            for (let char of button) {
+            for (const char of button) {
                 if (pos === null) {
                     inputElement.value = inputElement.value + char;
                 } else {
@@ -230,155 +299,94 @@ function onKeyPress(button: string): void {
     }
 }
 
-function onKeyPressNumeric(button: string): void {
-    if (
-        ![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, "{bksp}"].some(
-            (x) => String(x) === button
-        )
-    ) {
-        return;
-    }
-    if (button === "{bksp}") {
-        const strValue = String(inputElement.value);
-        if (strValue.length > 0) {
-            inputElement.value = strValue.substring(0, strValue.length - 1);
+function setup(): void {
+    chrome.storage.sync.get(
+        {
+            language: "english",
+        },
+        function (items) {
+            switch (items.language) {
+                case "german":
+                    languageLayout = germanLayout;
+                    break;
+                default:
+                    languageLayout = englishLayout;
+            }
+            const keyRowsDefault = languageLayout.layout.default;
+            keyRowsDefault[keyRowsDefault.length - 1] += " {downkeyboard}";
+            const keyRowsShift = languageLayout.layout.shift;
+            keyRowsShift[keyRowsShift.length - 1] += " {downkeyboard}";
+            if (keyboard) {
+                toggleShiftLayout();
+                toggleShiftLayout();
+            }
         }
-    } else {
-        inputElement.value = String(inputElement.value) + button;
-    }
-    performNativeKeyPress(inputElement, String(button).charCodeAt(0));
-}
-
-function performNativeKeyPress(element: HTMLInputElement, keyCode: number): void {
-    element.dispatchEvent(
-        new KeyboardEvent("keydown", { keyCode: keyCode, which: keyCode })
     );
-    element.dispatchEvent(
-        new KeyboardEvent("keypress", { keyCode: keyCode, which: keyCode })
-    );
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-}
 
-function onFocus(target: HTMLInputElement): void {
-    inputElement = target;
-    if (target.type.toLowerCase() === "number") {
-        keyboard.setOptions({
-            layout: numericLayout,
-            layoutName: "default",
-        });
-    } else {
-        keyboard.setOptions({
-            ...languageLayout,
-            layoutName: "default",
-        });
-    }
+    const styleElement = document.createElement("link");
+    styleElement.rel = "stylesheet";
+    styleElement.href = chrome.runtime.getURL("index.css");
+    document.head.appendChild(styleElement);
 
-    if (inputElement.matches(".no-keyboard")) {
-        showKeyboardToggler();
-        return;
-    }
+    keyboardElement = document.createElement("div");
+    keyboardElement.id = "virtual-keyboard";
+    keyboardElement.onmousedown = (e) => e.preventDefault();
+    keyboardElement.ontouchstart = (e) => e.preventDefault();
+    document.body.append(keyboardElement);
+    const keyboardWrapper = document.createElement("div");
+    keyboardWrapper.className = "keyboard-wrapper simple-keyboard";
+    keyboardElement.append(keyboardWrapper);
 
-    hideKeyboardToggler();
-    showKeyboard();
-    const offset = 50;
-    const bodyRect = document.body.getBoundingClientRect().top;
-    const elementRect = inputElement.getBoundingClientRect().top;
-    const elementPosition = elementRect - bodyRect;
-    const offsetPosition = elementPosition - offset;
-    window.scrollTo({ top: offsetPosition, behavior: "smooth" });
-}
+    togglerButton = document.createElement("div");
+    togglerButton.id = "keyboard-toggler";
+    togglerButton.className = "hidden";
+    togglerButton.onmousedown = (e) => e.preventDefault();
+    togglerButton.ontouchstart = (e) => e.preventDefault();
+    togglerButton.onclick = () => toggleKeyboard();
+    document.body.append(togglerButton);
+    document.body.addEventListener("mousedown", () => (isMouseDown = true));
+    document.body.addEventListener("mouseup", () => onMouseUp());
 
-function showKeyboardToggler(): void {
-    togglerButton.classList.remove("hidden");
-}
+    [
+        "input",
+        "pointerdown",
+        "mousedown",
+        "pointerup",
+        "mouseup",
+        "selectstart",
+        "click",
+    ].forEach((key) => {
+        window.addEventListener(
+            key,
+            (event) => {
+                if (isChildElement(event.target, keyboardElement)) {
+                    event.preventDefault();
+                }
+            },
+            true
+        );
+    });
 
-function hideKeyboardToggler(): void {
-    togglerButton.classList.add("hidden");
-}
-
-function toggleKeyboard(): void {
-    if (keyboardElement.style.display === "none") {
-        showKeyboard();
-    } else {
-        hideKeyboard();
-    }
-}
-
-function onFocusOut(): void {
-    if (inputElement) {
-        inputElement.blur();
-        inputElement = null as any;
-    }
+    keyboard = new Keyboard({
+        onKeyPress: (button) => onKeyPress(button),
+        onKeyReleased: (button) => onKeyRelease(button),
+        ...languageLayout,
+        display: {
+            "{tab}": "↹",
+            "{bksp}": "⌫",
+            "{downkeyboard}": "\u25BC",
+            "{space}": " ",
+            "{lock}": "⇪",
+            "{shift}": "⇧",
+            "{enter}": "↵",
+        },
+    });
+    setInterval(() => {
+        checkKeyboard();
+    }, 200);
     hideKeyboard();
-    hideKeyboardToggler();
 }
 
-function showKeyboard(): void {
-    const dialogs = document.querySelectorAll(".fixed-full");
-    if (keyboardHideTask != null) {
-        clearTimeout(keyboardHideTask as number);
-        keyboardHideTask = null;
-    }
-    keyboardElement.removeAttribute("style");
-    document.body.removeAttribute("style");
-    for (let fixed of dialogs) {
-        (fixed as HTMLElement).removeAttribute("style");
-    }
-}
 
-function checkKeyboard(): void {
-    if (isMouseDown) {
-        return;
-    }
-    if (document.activeElement && document.activeElement.matches(querySelector)) {
-        if (inputElement === document.activeElement) {
-            return;
-        }
-        onFocus(document.activeElement as HTMLInputElement);
-    } else {
-        if (inputElement === null) {
-            return;
-        }
-        onFocusOut();
-    }
-}
-
-function hideKeyboard(): void {
-    keyboardHideTask = setTimeout(() => {
-        const dialogs = document.querySelectorAll(".fixed-full");
-        keyboardElement.style.display = "none";
-        document.body.removeAttribute("style");
-        keyboardHideTask = null;
-        for (const fixed of dialogs) {
-            (fixed as HTMLElement).removeAttribute("style");
-        }
-    });
-}
-
-function handleShiftPress(): void {
-    shiftPressed = !shiftPressed;
-    toggleShiftLayout();
-}
-
-function handleCapsLockPressed(): void {
-    toggleShiftLayout();
-}
-
-function disableShiftPress(): void {
-    if (!shiftPressed) {
-        return;
-    }
-    shiftPressed = false;
-    toggleShiftLayout();
-}
-
-function toggleShiftLayout(): void {
-    let currentLayout = keyboard.options.layoutName;
-    let shiftToggle = currentLayout === "default" ? "shift" : "default";
-
-    keyboard.setOptions({
-        layoutName: shiftToggle,
-    });
-}
 
 setup();
