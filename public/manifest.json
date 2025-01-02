@@ -1,34 +1,39 @@
 {
   "manifest_version": 3,
-
-  "name": "Chrome Extension TypeScript Starter",
-  "description": "Chrome Extension, TypeScript, Visual Studio Code",
+  "name": "Terminal Chrome Extension",
+  "description": "A chrome extension, that is used in a terminal that is running in chrome kiosk mode.",
   "version": "1.0",
-
   "options_ui": {
     "page": "options.html"
   },
-
   "action": {
     "default_icon": "icon.png",
     "default_popup": "popup.html"
   },
-
-  "content_scripts": [
-      {
-          "matches": ["<all_urls>"],
-          "js": ["js/vendor.js", "js/content_script.js"]
-      }
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "contentScript.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
   ],
-
-  "background": {
-    "service_worker": "js/background.js"
-  },
-
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "js/vendor.js",
+        "js/index.js"
+      ]
+    }
+  ],
   "permissions": [
     "storage"
   ],
-
   "host_permissions": [
     "<all_urls>"
   ]
